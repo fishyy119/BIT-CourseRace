@@ -1,10 +1,10 @@
 # BIT-CourseRace
 
-北京理工大学研究生抢课脚本，2024年9月版本存在bug，已修复，修复后进行过简单测试，可正常使用
+北京理工大学研究生抢课脚本
 
 ## Install
 
-Python 3.8/3.11
+Python 3.12
 
 ```shell
 pip install -r requirements.txt
@@ -12,7 +12,7 @@ pip install -r requirements.txt
 
 ## Usage
 
-​	运行脚本，指定cookie和课程代码，课程代码可以输入多个
+​运行脚本，指定cookie和课程代码，课程代码可以输入多个
 
 ```
 usage: CourseRace.py [-h] [-c COOKIE] [-i COURSEID [COURSEID ...]] [-v] [-d]
@@ -29,19 +29,19 @@ options:
   -d, --debug           if you want to show debug messages, then use this
 ```
 
-​	假设要选高级工程管理（0018002）、波动力学（0100002）和最优化理论与方法（1200008），那么使用方法如下：
+​假设要选高级工程管理（0018002）、波动力学（0100002）和最优化理论与方法（1200008），那么使用方法如下：
 
 ```shell
  python .\CourseRace.py -c "your cookie" -i 0018002 0100002 1200008
 ```
 
-​	如果通过webvpn访问的选课网站，那么请添加`-v`或`--vpn`选项
+​如果通过webvpn访问的选课网站，那么请添加`-v`或`--vpn`选项
 
 ```shell
  python .\CourseRace.py -v -c "your cookie" -i 0018002 0100002 1200008
 ```
 
-​	如果想要查看每次抢课请求的结果（或确认脚本是否正常工作），那么请添加`-d`或`--debug`选项
+​如果想要查看每次抢课请求的结果（或确认脚本是否正常工作），那么请添加`-d`或`--debug`选项
 
 ```shell
  python .\CourseRace.py -d -c "your cookie" -i 0018002 0100002 1200008
@@ -49,7 +49,7 @@ options:
 
 ## Usage by hand
 
-​	脚本默认排除非全课程以及良乡课程，如果有相关需求、或出现脚本没能识别的课程，请用以下方式手动添加课程
+​脚本默认排除非全课程以及良乡课程，如果有相关需求、或出现脚本没能识别的课程，请用以下方式手动添加课程
 
 1. 添加cookie
 
@@ -60,9 +60,7 @@ options:
    }
    ```
 
-2. 添加课程信息
-
-   结构如下所示
+2. 按如下结构添加课程信息
 
    ```python
    # add class info here
@@ -81,14 +79,13 @@ options:
    
    选课按钮右键->检查，查找bjdm代码，位置如下
 
-   ![image-20231012181121263](https://picgo-111.oss-cn-beijing.aliyuncs.com/img/image-20231012181121263.png)
+   ![image-20231012181121263](figures/bdjm.png)
 
-4. 将课程信息加入列表
+3. 将课程信息加入列表
 
    ```python
    courseList = [
        # add class info struct here
-       # eg:
        juzhen_zgc01_data,
        juzhen_zgc02_data,
        juzhen_zgc05_data
