@@ -15,7 +15,7 @@ pip install -r requirements.txt
 ​运行脚本，指定cookie和课程代码，课程代码可以输入多个
 
 ```
-usage: CourseRace.py [-h] [-c COOKIE] [-i COURSEID [COURSEID ...]] [-v] [-d]
+usage: CourseRace.py [-h] -c COOKIE [-i COURSEID [COURSEID ...]] [-v] [-l] [-d]
 
 BIT Course Race. A script to help masters get courses.
 
@@ -26,6 +26,7 @@ options:
   -i COURSEID [COURSEID ...], --courseID COURSEID [COURSEID ...]
                         ID of courses, split with space
   -v, --vpn             if you choose course through webvpn, then use this
+  -l, --liangxiang      switch campuses to Liangxiang campuses
   -d, --debug           if you want to show debug messages, then use this
 ```
 
@@ -41,6 +42,13 @@ options:
  python .\CourseRace.py -v -c "your cookie" -i 0018002 0100002 1200008
 ```
 
+​如果想切换默认校区为良乡校区，那么请添加`-l`或`--liangxiang`选项
+
+```shell
+ python .\CourseRace.py -l -c "your cookie" -i 0018002 0100002 1200008
+```
+
+
 ​如果想要查看每次抢课请求的结果（或确认脚本是否正常工作），那么请添加`-d`或`--debug`选项
 
 ```shell
@@ -49,7 +57,7 @@ options:
 
 ## Usage by hand
 
-​脚本默认排除非全课程以及良乡课程，如果有相关需求、或出现脚本没能识别的课程，请用以下方式手动添加课程
+​脚本默认排除非全课程，如果有相关需求、或出现脚本没能识别的课程，请用以下方式手动添加课程
 
 1. 添加cookie
 
