@@ -1,19 +1,23 @@
 import argparse
 import json
 import logging
+import threading
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Dict, List, Optional, TypedDict
+from typing import Dict, List, Optional, TypedDict, cast
 
 import requests
 from prettytable import PrettyTable
+from rich.live import Live
+from rich.table import Table
 from urllib3.exceptions import InsecureRequestWarning
 
 warnings.simplefilter("ignore", InsecureRequestWarning)  # 只忽略 InsecureRequestWarning
 # requests.packages.urllib3.disable_warnings()
 
+stop_event = threading.Event()
 
 sourceUrl = "https://xk.bit.edu.cn/yjsxkapp/sys/xsxkappbit/xsxkCourse/choiceCourse.do?_="
 sourceUrl_vpn = "https://webvpn.bit.edu.cn/https/77726476706e69737468656265737421e8fc0f9e2e2426557a1dc7af96/yjsxkapp/sys/xsxkappbit/xsxkCourse/choiceCourse.do?vpn-12-o2-xk.bit.edu.cn&_="
@@ -33,14 +37,14 @@ InPlanCoursePath = "./InPlanCourses.json"
 # ================================= 手动添加课程信息 ================================
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
-    "Cookie": "",  # add your cookie here
+    "Cookie": "",
 }
 
 
 class CourseInfo(TypedDict):
     bjdm: str
     lx: str
-    csrfToken: str
+    csrfToken: str  # auto detect
 
 
 # add class info here
@@ -53,9 +57,19 @@ juzhen_zgc01_data: CourseInfo = {
 }
 
 courseList: List[CourseInfo] = [
+    # juzhen_zgc01_data
     # add class info struct here
 ]
 # ================================================================================
+
+
+class StatusInfo(TypedDict):
+    bjmc: str
+    success: int
+    fail: int
+
+
+status: Dict[str, StatusInfo] = {}
 
 
 def printErr(string: str):
@@ -144,62 +158,117 @@ def getCourseList():
     print("[+] Success. Courses have been saved in " + InPlanCoursePath)
 
 
-def findCourse(idList: List[str]):
+def findCourse(idList: List[str], XQMC: str):
     with open(InPlanCoursePath, "r", encoding="utf8") as f:
-        InPlanCourseInfo = f.read()
-    InPlanCourseInfo = json.loads(InPlanCourseInfo)
+        InPlanCourseInfoFile = f.read()
+    InPlanCourseInfo = json.loads(InPlanCourseInfoFile)
     with open(OutPlanCoursePath, "r", encoding="utf8") as f:
-        OutPlanCourseInfo = f.read()
-    OutPlanCourseInfo = json.loads(OutPlanCourseInfo)
+        OutPlanCourseInfoFile = f.read()
+    OutPlanCourseInfo = json.loads(OutPlanCourseInfoFile)
 
     targetList: List[List[str]] = []
     for id in idList:
         print("[*] Looking for course id:", id, "...")
         for info in InPlanCourseInfo["datas"]:
-            if id == info["KCDM"] and info["XQMC"] != "良乡校区" and ("非全" not in info["BJMC"]):
-                targetList.append([info["KCMC"], info["RKJS"], "{}/{}".format(info["DQRS"], info["KXRS"])])
+            if id == info["KCDM"] and info["XQMC"] == XQMC and ("非全" not in info["BJMC"]):
+                targetList.append([info["BJMC"], info["RKJS"], "{}/{}".format(info["DQRS"], info["KXRS"])])
                 courseList.append({"bjdm": info["BJDM"], "lx": "0", "csrfToken": ""})
+                status[info["BJDM"]] = {"bjmc": info["BJMC"], "success": 0, "fail": 0}
         for info in OutPlanCourseInfo["datas"]:
-            if id == info["KCDM"] and info["XQMC"] != "良乡校区" and ("非全" not in info["BJMC"]):
-                targetList.append([info["KCMC"], info["RKJS"], "{}/{}".format(info["DQRS"], info["KXRS"])])
+            if id == info["KCDM"] and info["XQMC"] == XQMC and ("非全" not in info["BJMC"]):
+                targetList.append([info["BJMC"], info["RKJS"], "{}/{}".format(info["DQRS"], info["KXRS"])])
                 courseList.append({"bjdm": info["BJDM"], "lx": "1", "csrfToken": ""})
+                status[info["BJDM"]] = {"bjmc": info["BJMC"], "success": 0, "fail": 0}
+
+    for course in courseList:
+        # 前面手动添加的课程信息，在信息中搜索
+        if course["bjdm"] not in status:
+            searched = (
+                c
+                if (
+                    c := next((info for info in InPlanCourseInfo["datas"] if info["BJDM"] == course["bjdm"]), None)
+                    is not None
+                )
+                else next((info for info in OutPlanCourseInfo["datas"] if info["BJDM"] == course["bjdm"]), None)
+            )
+            if searched is not None:
+                searched = cast(Dict[str, str], searched)
+                targetList.append(
+                    [searched["BJMC"], searched["RKJS"], "{}/{}".format(searched["DQRS"], searched["KXRS"])]
+                )
+                status[course["bjdm"]] = {"bjmc": searched["BJMC"], "success": 0, "fail": 0}
+            else:
+                # 没搜索到，姑且还是添加进来进行请求，未测试可行性
+                status[course["bjdm"]] = {"bjmc": course["bjdm"], "success": 0, "fail": 0}
 
     if len(targetList) == 0:
         print("[!] No course found according to course id.")
-        exit(0)
-
-    table = PrettyTable()
-    table.field_names = ["Name", "Teachers", "Chosen"]
-    table.add_rows(targetList)  # type: ignore
-    print("[+] Target courses showm as follow:")
-    print(table)
+        if len(courseList) == 0:
+            print("[!] No course need to be chosen.")
+            exit(0)
+    else:
+        table = PrettyTable()
+        table.field_names = ["Name", "Teachers", "Chosen"]
+        table.align["Name"] = "l"  # type: ignore
+        table.add_rows(targetList)  # type: ignore
+        print("[+] Target courses showm as follow:")
+        print(table)
 
 
 def chooseCourse(course: CourseInfo):
-    while True:
+    while not stop_event.is_set():
         timestamp = int(round(time.time() * 1000))
         courseUrl = sourceUrl + str(timestamp)
         res = requests.post(url=courseUrl, data=course, headers=headers, verify=False)
         res = json.loads(res.text)
         if res["code"] == 1:
-            printOK("[+] A course is chosen! You can see on Web Browser!")
+            printOK(f"[+] A course is chosen! You can see on Web Browser! [{status[course['bjdm']]['bjmc']}]")
+            status[course["bjdm"]]["success"] += 1
         else:
             logging.debug(res)
+            status[course["bjdm"]]["fail"] += 1
         time.sleep(0.01)
+
+
+def make_status_table():
+    table = Table(title="Status")
+    table.add_column("Name", justify="center")
+    table.add_column("S", justify="center")
+    table.add_column("F", justify="center")
+
+    for _, s in status.items():
+        table.add_row(s["bjmc"], str(s["success"]), str(s["fail"]))
+    return table
 
 
 def start():
     print("[*] Start race...Please wait for servel hours...")
-    pool = ThreadPoolExecutor(max_workers=len(courseList))
-    for course in courseList:
-        pool.submit(chooseCourse, course)
-
-    while True:
-        res = requests.get(url=infoPage, headers=headers, verify=False)
-        csrfToken = json.loads(res.text)["csrfToken"]
+    with ThreadPoolExecutor(max_workers=len(courseList)) as pool:
         for course in courseList:
-            course["csrfToken"] = csrfToken
-        time.sleep(60)
+            pool.submit(chooseCourse, course)
+
+        heartbeat = 0
+        live = Live(make_status_table(), refresh_per_second=2)
+        live.start()
+        try:
+            while not stop_event.is_set():
+                if heartbeat % 30 == 0:
+                    try:
+                        res = requests.get(url=infoPage, headers=headers, verify=False)
+                        csrfToken = json.loads(res.text)["csrfToken"]
+                        for course in courseList:
+                            course["csrfToken"] = csrfToken
+                    except Exception as e:
+                        print(f"[ERROR] refresh token failed: {e}")
+
+                live.update(make_status_table())
+                time.sleep(2)
+                heartbeat += 1
+        except KeyboardInterrupt:
+            print("[*] Ctrl+C pressed, stopping all threads...")
+            stop_event.set()
+        finally:
+            live.stop()
 
 
 if __name__ == "__main__":
@@ -209,6 +278,7 @@ if __name__ == "__main__":
         cookie: str
         courseID: Optional[List[str]]
         vpn: bool
+        liangxiang: bool
         debug: bool
 
     parser = argparse.ArgumentParser(description="BIT Course Race. A script to help masters get courses.")
@@ -227,10 +297,15 @@ if __name__ == "__main__":
         "-v", "--vpn", dest="vpn", action="store_true", help="if you choose course through webvpn, then use this"
     )
     parser.add_argument(
+        "-l", "--liangxiang", dest="liangxiang", action="store_true", help="switch campuses to Liangxiang campuses"
+    )
+    parser.add_argument(
         "-d", "--debug", dest="debug", action="store_true", help="if you want to show debug messages, then use this"
     )
     parsed = parser.parse_args()
-    args: Args = Args(cookie=parsed.cookie, courseID=parsed.courseID, vpn=parsed.vpn, debug=parsed.debug)
+    args: Args = Args(
+        cookie=parsed.cookie, courseID=parsed.courseID, vpn=parsed.vpn, liangxiang=parsed.liangxiang, debug=parsed.debug
+    )
 
     headers["Cookie"] = args.cookie
 
@@ -244,7 +319,10 @@ if __name__ == "__main__":
 
     getCourseList()
 
-    findCourse(args.courseID if args.courseID else [])
+    findCourse(
+        args.courseID if args.courseID else [],
+        "良乡校区" if args.liangxiang else "中关村校区",
+    )
 
     start()
 
